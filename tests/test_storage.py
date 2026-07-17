@@ -1,4 +1,6 @@
 from pathlib import Path
+import csv
+import json
 import tempfile
 import unittest
 
@@ -22,3 +24,30 @@ class ClipboardStoreTest(unittest.TestCase):
             self.assertTrue(store.delete(entry.id))
             self.assertEqual(store.clear(), 0)
             self.assertEqual(store.count(), 0)
+
+    def test_only_consecutive_duplicates_are_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ClipboardStore(Path(tmp) / "db.sqlite3")
+            self.assertTrue(store.add("first"))
+            self.assertFalse(store.add("first"))
+            self.assertTrue(store.add("second"))
+            self.assertTrue(store.add("first"))
+            self.assertEqual([entry.content for entry in store.list()], ["first", "second", "first"])
+
+    def test_export_json_and_csv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = ClipboardStore(root / "db.sqlite3")
+            store.add("one")
+            store.add("two")
+
+            json_path = root / "exports" / "history.json"
+            csv_path = root / "exports" / "history.csv"
+            self.assertEqual(store.export_json(json_path), 2)
+            self.assertEqual(store.export_csv(csv_path), 2)
+
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual([row["content"] for row in payload], ["two", "one"])
+            with csv_path.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual([row["content"] for row in rows], ["two", "one"])

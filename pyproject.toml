@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cleepwheel"
+version = "0.1.0"
+description = "Local text clipboard history for macOS"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "BlackMamba Records"}]
+dependencies = []
+
+[project.scripts]
+cleepwheel = "cleepwheel.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cleepwheel*"]
+
