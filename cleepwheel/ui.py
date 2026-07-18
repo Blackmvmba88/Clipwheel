@@ -1,11 +1,41 @@
 from __future__ import annotations
 
+import fcntl
 import tkinter as tk
+import signal
+import sys
 from tkinter import messagebox, simpledialog, ttk
 from pathlib import Path
 
 from .clipboard import write_clipboard_text
 from .storage import ClipboardStore
+from .settings import load_settings
+
+
+MAX_WINDOW_INSTANCES = 2
+
+
+class WindowLimitError(RuntimeError):
+    pass
+
+
+def acquire_window_slot(db_path: Path):
+    """Acquire one of two process-wide window slots using advisory file locks."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    for slot in range(1, MAX_WINDOW_INSTANCES + 1):
+        lock_path = db_path.parent / f"cleepwheel-window-{slot}.lock"
+        handle = lock_path.open("a+")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            handle.close()
+            continue
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f"{slot}\n")
+        handle.flush()
+        return handle
+    raise WindowLimitError("CleepWheel already has two window instances")
 
 
 class AnimatedBorder:
@@ -61,7 +91,9 @@ class AnimatedBorder:
 
 class ClipboardWindow:
     def __init__(self, db_path: Path):
+        self.window_slot = acquire_window_slot(db_path)
         self.store = ClipboardStore(db_path)
+        self.history_view_limit = load_settings(db_path).history_view_limit
         self.entries = []
         self.divider_x = 360
         self.dragging_divider = False
@@ -71,6 +103,7 @@ class ClipboardWindow:
         self.visual_divider_glow = True
 
         self.root = tk.Tk()
+        self.close_action = self.root.destroy
         self.root.title("CleepWheel")
         self.root.geometry("980x640")
         self.root.minsize(760, 480)
@@ -152,6 +185,19 @@ class ClipboardWindow:
             background=[("active", "#24304b"), ("pressed", "#2e3a59")],
             foreground=[("disabled", "#8fa1c9")],
         )
+        style.configure(
+            "Cleep.Bullet.TButton",
+            padding=(8, 4),
+            background="#0e1320",
+            foreground="#cbd8f6",
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            "Cleep.Bullet.TButton",
+            background=[("active", "#1a2540"), ("pressed", "#24304b")],
+            foreground=[("active", "#61dafb")],
+        )
 
     def _apply_transparency(self) -> None:
         if not self.visual_transparency:
@@ -220,31 +266,54 @@ class ClipboardWindow:
 
     def _build_toolbar(self) -> None:
         bar = tk.Frame(self.shell, bg="#0e1320")
-        bar.pack(fill=tk.X, pady=(10, 0))
+        bar.pack(fill=tk.X, before=self.body, pady=(0, 10))
 
-        ttk.Button(bar, text="Copy", style="Cleep.TButton", command=self.copy_selected).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(bar, text="Edit", style="Cleep.TButton", command=self.edit_selected).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(bar, text="Delete", style="Cleep.TButton", command=self.delete_selected).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(bar, text="Refresh", style="Cleep.TButton", command=self.refresh).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(bar, text="Quit", style="Cleep.TButton", command=self.root.destroy).pack(side=tk.RIGHT)
+        actions = tk.Frame(bar, bg="#0e1320")
+        actions.pack(fill=tk.X)
+        for label, command in (
+            ("• Copiar", self.copy_selected),
+            ("• Editar", self.edit_selected),
+            ("• Borrar", self.delete_selected),
+            ("• Actualizar", self.refresh),
+        ):
+            ttk.Button(
+                actions,
+                text=label,
+                style="Cleep.Bullet.TButton",
+                command=command,
+            ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            actions,
+            text="• Cerrar",
+            style="Cleep.Bullet.TButton",
+            command=lambda: self.close_action(),
+        ).pack(side=tk.RIGHT)
 
         controls = tk.Frame(bar, bg="#0e1320")
-        controls.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(controls, text="Neon", style="Cleep.TButton", command=self.toggle_neon).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(controls, text="Transparency", style="Cleep.TButton", command=self.toggle_transparency).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(controls, text="Border", style="Cleep.TButton", command=self.toggle_border).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(controls, text="Divider Glow", style="Cleep.TButton", command=self.toggle_divider_glow).pack(side=tk.LEFT, padx=(0, 8))
+        controls.pack(fill=tk.X, pady=(4, 0))
+        for label, command in (
+            ("• Neón", self.toggle_neon),
+            ("• Transparencia", self.toggle_transparency),
+            ("• Borde", self.toggle_border),
+            ("• Brillo divisor", self.toggle_divider_glow),
+        ):
+            ttk.Button(
+                controls,
+                text=label,
+                style="Cleep.Bullet.TButton",
+                command=command,
+            ).pack(side=tk.LEFT, padx=(0, 4))
         self.effect_state = tk.Label(controls, text=self._effect_summary(), bg="#0e1320", fg="#49dfff", font=("Helvetica Neue", 10, "bold"))
         self.effect_state.pack(side=tk.RIGHT)
 
         self.hint = tk.Label(
             bar,
-            text="Drag the bright divider to resize.",
+            text="Arrastra el divisor brillante para ajustar los paneles.",
             bg="#0e1320",
             fg="#8fa1c9",
             font=("Helvetica Neue", 10),
         )
-        self.hint.pack(side=tk.BOTTOM, anchor="w", pady=(10, 0))
+        self.hint.pack(anchor="w", pady=(4, 0))
 
     def _on_canvas_resize(self, _event) -> None:
         width = max(0, self.canvas.winfo_width() - 24)
@@ -299,7 +368,7 @@ class ClipboardWindow:
         self.dragging_divider = False
 
     def refresh(self) -> None:
-        self.entries = self.store.list(200)
+        self.entries = self.store.list(self.history_view_limit)
         self.listbox.delete(0, tk.END)
         for entry in self.entries:
             snippet = entry.content.replace("\n", " ")
@@ -412,4 +481,56 @@ class ClipboardWindow:
 
 
 def open_window(db_path: Path) -> int:
-    return ClipboardWindow(db_path).run()
+    try:
+        return ClipboardWindow(db_path).run()
+    except WindowLimitError as exc:
+        print(str(exc), file=sys.stderr)
+        return 0
+
+
+def open_warm_window(db_path: Path) -> int:
+    """Keep a hidden Tk window ready and toggle it on SIGUSR1."""
+    try:
+        window = ClipboardWindow(db_path)
+    except WindowLimitError as exc:
+        print(str(exc), file=sys.stderr)
+        return 0
+    root = window.root
+    toggle_requests = 0
+
+    def request_toggle(_signum=None, _frame=None) -> None:
+        nonlocal toggle_requests
+        toggle_requests += 1
+
+    def hide_window(_event=None) -> None:
+        root.withdraw()
+
+    def poll_request() -> None:
+        nonlocal toggle_requests
+        if toggle_requests:
+            should_toggle = toggle_requests % 2 == 1
+            toggle_requests = 0
+            if should_toggle and root.state() == "withdrawn":
+                window.refresh()
+                root.deiconify()
+                root.lift()
+                try:
+                    root.attributes("-topmost", True)
+                    root.after(120, lambda: root.attributes("-topmost", False))
+                except tk.TclError:
+                    pass
+                root.focus_force()
+                print("warm window shown", flush=True)
+            elif should_toggle:
+                hide_window()
+                print("warm window hidden", flush=True)
+        root.after(16, poll_request)
+
+    signal.signal(signal.SIGUSR1, request_toggle)
+    window.close_action = hide_window
+    root.protocol("WM_DELETE_WINDOW", hide_window)
+    root.bind("<Escape>", hide_window)
+    root.withdraw()
+    root.after(16, poll_request)
+    print("warm window ready", flush=True)
+    return window.run()
