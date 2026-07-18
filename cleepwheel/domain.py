@@ -9,6 +9,7 @@ class ClipboardEntry:
     content: str
     created_at: str
     content_hash: str
+    pinned: bool = False
 
 
 @dataclass(frozen=True)

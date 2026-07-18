@@ -45,6 +45,19 @@ class ClipboardStoreTest(unittest.TestCase):
             self.assertTrue(store.add("first"))
             self.assertEqual([entry.content for entry in store.list()], ["first", "second", "first"])
 
+    def test_pinned_entries_are_listed_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ClipboardStore(Path(tmp) / "db.sqlite3")
+            store.add("older important")
+            important = store.latest()
+            store.add("newer")
+            self.assertTrue(store.set_pinned(important.id, True))
+            self.assertFalse(store.set_pinned(999, True))
+            self.assertEqual([entry.content for entry in store.list()], ["older important", "newer"])
+            self.assertTrue(store.get(important.id).pinned)
+            self.assertTrue(store.set_pinned(important.id, False))
+            self.assertEqual(store.list()[0].content, "newer")
+
     def test_export_json_and_csv(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

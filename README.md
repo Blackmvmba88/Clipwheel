@@ -12,6 +12,7 @@ sola base SQLite y conserva compatibilidad con el historial creado por `0.1.0`.
 - Abre una WebUI local para ver, copiar, editar y borrar entradas desde el navegador.
 - Incluye watcher para capturar clipboard.
 - Incluye CLI, ventana gráfica y apoyo para `launchd`.
+- Permite fijar entradas importantes para mantenerlas arriba del historial.
 - Mantiene una ventana precargada para respuesta inmediata al clic central.
 
 ## Instalación
@@ -36,6 +37,8 @@ python -m pip install .
 cleepwheel doctor
 cleepwheel list
 cleepwheel search "texto"
+cleepwheel pin 42
+cleepwheel unpin 42
 cleepwheel export --format json --output history.json
 cleepwheel watch
 cleepwheel mouse

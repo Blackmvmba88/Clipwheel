@@ -41,7 +41,8 @@ def format_entry(entry) -> str:
     snippet = entry.content.replace("\n", " ").replace("\r", " ")
     if len(snippet) > SETTINGS.snippet_width:
         snippet = snippet[: SETTINGS.snippet_width - 3] + "..."
-    return f"[{entry.id}] {entry.created_at} | {snippet}"
+    marker = "* " if entry.pinned else ""
+    return f"{marker}[{entry.id}] {entry.created_at} | {snippet}"
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -98,6 +99,15 @@ def cmd_search(args: argparse.Namespace) -> int:
 def cmd_clear(args: argparse.Namespace) -> int:
     store = ClipboardStore(args.db)
     print(f"removed {store.clear()} entries")
+    return 0
+
+
+def cmd_pin(args: argparse.Namespace) -> int:
+    store = ClipboardStore(args.db)
+    if not store.set_pinned(args.id, args.pinned):
+        print(f"entry not found: {args.id}", file=sys.stderr)
+        return 1
+    print(f"{'pinned' if args.pinned else 'unpinned'} entry {args.id}")
     return 0
 
 
@@ -286,6 +296,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     clear = subparsers.add_parser("clear", help="delete all entries")
     clear.set_defaults(func=cmd_clear)
+
+    for name, pinned in (("pin", True), ("unpin", False)):
+        command = subparsers.add_parser(name, help=f"{name} an entry")
+        command.add_argument("id", type=positive_int)
+        command.set_defaults(func=cmd_pin, pinned=pinned)
 
     doctor = subparsers.add_parser("doctor", help="check database health")
     doctor.set_defaults(func=cmd_doctor)

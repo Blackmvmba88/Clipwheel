@@ -60,6 +60,18 @@ class CliTest(unittest.TestCase):
             self.assertIn("status: ok", stdout.getvalue())
             self.assertIn("warning: clipboard history is empty", stderr.getvalue())
 
+    def test_pin_and_unpin_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "history.sqlite3"
+            store = cli.ClipboardStore(db)
+            store.add("important")
+            entry_id = store.latest().id
+            self.assertEqual(cli.main(["--db", str(db), "pin", str(entry_id)]), 0)
+            self.assertTrue(store.get(entry_id).pinned)
+            self.assertEqual(cli.main(["--db", str(db), "unpin", str(entry_id)]), 0)
+            self.assertFalse(store.get(entry_id).pinned)
+            self.assertEqual(cli.main(["--db", str(db), "pin", "999"]), 1)
+
     @patch("cleepwheel.cli.ClipboardStore")
     def test_doctor_fails_for_database_warning(self, store_type):
         store_type.return_value.doctor.return_value = ["integrity check failed"]

@@ -119,6 +119,16 @@ class IntegratedInfrastructureTest(unittest.TestCase):
                 update_resp = request.urlopen(update_req).read().decode("utf-8")
                 self.assertIn("second updated", update_resp)
 
+                pin_req = request.Request(
+                    f"{base}/api/entries/2/pin",
+                    data=b'{"pinned":true}',
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                pin_resp = request.urlopen(pin_req).read().decode("utf-8")
+                self.assertIn('"pinned": true', pin_resp)
+                self.assertTrue(store.get(2).pinned)
+
                 delete_req = request.Request(f"{base}/api/entries/1", method="DELETE")
                 delete_resp = request.urlopen(delete_req).read().decode("utf-8")
                 self.assertIn('"ok": true', delete_resp)

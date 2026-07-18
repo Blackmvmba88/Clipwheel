@@ -70,6 +70,7 @@ def _html_page() -> str:
       <input id="query" placeholder="Search clipboard..." size="26" />
       <button class="primary" id="refresh">Refresh</button>
       <button id="copySelected">Copy selected</button>
+      <button id="pinSelected">Pin / unpin</button>
       <button id="editSelected">Edit selected</button>
       <button class="danger" id="deleteSelected">Delete selected</button>
       <div class="status" id="status">Ready</div>
@@ -132,7 +133,7 @@ def _html_page() -> str:
         li.className = 'entry' + (selectedId === entry.id ? ' selected' : '');
         li.innerHTML = `
           <div class="meta">
-            <span>#${entry.id}</span>
+            <span>${entry.pinned ? '★ ' : ''}#${entry.id}</span>
             <span>${escapeHtml(entry.created_at)}</span>
           </div>
           <div class="content">${escapeHtml(entry.content.slice(0, 220))}${entry.content.length > 220 ? '...' : ''}</div>
@@ -186,6 +187,16 @@ def _html_page() -> str:
       await load();
     }
 
+    async function togglePin() {
+      if (!selectedEntry) return;
+      await api(`/api/entries/${selectedEntry.id}/pin`, {
+        method: 'POST',
+        body: JSON.stringify({ pinned: !selectedEntry.pinned }),
+      });
+      setStatus(`${selectedEntry.pinned ? 'Unpinned' : 'Pinned'} #${selectedEntry.id}`);
+      await load();
+    }
+
     async function deleteSelected() {
       if (!selectedEntry) return;
       if (!confirm(`Delete entry #${selectedEntry.id}?`)) return;
@@ -201,6 +212,7 @@ def _html_page() -> str:
     document.getElementById('refresh').addEventListener('click', load);
     document.getElementById('copySelected').addEventListener('click', copySelected);
     document.getElementById('editSelected').addEventListener('click', saveEdit);
+    document.getElementById('pinSelected').addEventListener('click', togglePin);
     document.getElementById('deleteSelected').addEventListener('click', deleteSelected);
     document.getElementById('copyDetail').addEventListener('click', copySelected);
     document.getElementById('saveEdit').addEventListener('click', saveEdit);
@@ -273,6 +285,16 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        segments = [segment for segment in parsed.path.split("/") if segment]
+        if len(segments) == 4 and segments[:2] == ["api", "entries"] and segments[2].isdigit() and segments[3] == "pin":
+            entry_id = int(segments[2])
+            payload = self._read_json()
+            if not self.store.set_pinned(entry_id, bool(payload.get("pinned", True))):
+                self._send_json({"error": "entry not found"}, 404)
+                return
+            entry = self.store.get(entry_id)
+            self._send_json({"ok": True, "entry": asdict(entry) if entry else None})
+            return
         entry_id, is_copy = self._entry_id_from_path(parsed.path)
         if entry_id is not None:
             if is_copy:

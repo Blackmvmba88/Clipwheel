@@ -12,7 +12,7 @@ from .domain import ClipboardEntry
 from .settings import load_settings
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ClipboardStore:
@@ -60,10 +60,13 @@ class ClipboardStore:
                         "UPDATE clipboard_entries SET content_hash = ? WHERE id = ?",
                         (self._hash(row["content"]), row["id"]),
                     )
+            if "pinned" not in columns:
+                conn.execute("ALTER TABLE clipboard_entries ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
             conn.execute(
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+            conn.execute("UPDATE metadata SET value = ? WHERE key = 'schema_version'", (str(SCHEMA_VERSION),))
             conn.execute(
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES ('max_content_chars', ?)",
                 (str(load_settings(self.db_path).max_content_chars),),
@@ -105,18 +108,22 @@ class ClipboardStore:
     def list(self, limit: int = 50) -> List[ClipboardEntry]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT id, content, content_hash, created_at FROM clipboard_entries ORDER BY id DESC LIMIT ?",
+                "SELECT id, content, content_hash, created_at, pinned FROM clipboard_entries ORDER BY pinned DESC, id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [ClipboardEntry(r["id"], r["content"], r["created_at"], r["content_hash"]) for r in rows]
+        return [self._entry(r) for r in rows]
 
     def list_all(self) -> List[ClipboardEntry]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT id, content, content_hash, created_at "
-                "FROM clipboard_entries ORDER BY id DESC"
+                "SELECT id, content, content_hash, created_at, pinned "
+                "FROM clipboard_entries ORDER BY pinned DESC, id DESC"
             ).fetchall()
-        return [ClipboardEntry(r["id"], r["content"], r["created_at"], r["content_hash"]) for r in rows]
+        return [self._entry(r) for r in rows]
+
+    @staticmethod
+    def _entry(row: sqlite3.Row) -> ClipboardEntry:
+        return ClipboardEntry(row["id"], row["content"], row["created_at"], row["content_hash"], bool(row["pinned"]))
 
     def latest(self) -> Optional[ClipboardEntry]:
         rows = self.list(1)
@@ -125,20 +132,25 @@ class ClipboardStore:
     def get(self, entry_id: int) -> Optional[ClipboardEntry]:
         with closing(self._connect()) as conn:
             row = conn.execute(
-                "SELECT id, content, content_hash, created_at FROM clipboard_entries WHERE id = ?",
+                "SELECT id, content, content_hash, created_at, pinned FROM clipboard_entries WHERE id = ?",
                 (entry_id,),
             ).fetchone()
         if not row:
             return None
-        return ClipboardEntry(row["id"], row["content"], row["created_at"], row["content_hash"])
+        return self._entry(row)
 
     def search(self, query: str, limit: int = 50) -> List[ClipboardEntry]:
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT id, content, content_hash, created_at FROM clipboard_entries WHERE content LIKE ? ORDER BY id DESC LIMIT ?",
+                "SELECT id, content, content_hash, created_at, pinned FROM clipboard_entries WHERE content LIKE ? ORDER BY pinned DESC, id DESC LIMIT ?",
                 (f"%{query}%", limit),
             ).fetchall()
-        return [ClipboardEntry(r["id"], r["content"], r["created_at"], r["content_hash"]) for r in rows]
+        return [self._entry(r) for r in rows]
+
+    def set_pinned(self, entry_id: int, pinned: bool) -> bool:
+        with closing(self._connect()) as conn, conn:
+            cur = conn.execute("UPDATE clipboard_entries SET pinned = ? WHERE id = ?", (int(pinned), entry_id))
+            return cur.rowcount > 0
 
     def update(self, entry_id: int, content: str) -> bool:
         content = content.strip()
@@ -203,7 +215,7 @@ class ClipboardStore:
     def export_json(self, path: Path, limit: Optional[int] = None) -> int:
         rows = self.list_all() if limit is None else self.list(limit)
         payload = [
-            {"id": e.id, "content": e.content, "content_hash": e.content_hash, "created_at": e.created_at}
+            {"id": e.id, "content": e.content, "content_hash": e.content_hash, "created_at": e.created_at, "pinned": e.pinned}
             for e in rows
         ]
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -214,8 +226,8 @@ class ClipboardStore:
         rows = self.list_all() if limit is None else self.list(limit)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=["id", "content", "content_hash", "created_at"])
+            writer = csv.DictWriter(handle, fieldnames=["id", "content", "content_hash", "created_at", "pinned"])
             writer.writeheader()
             for e in rows:
-                writer.writerow({"id": e.id, "content": e.content, "content_hash": e.content_hash, "created_at": e.created_at})
+                writer.writerow({"id": e.id, "content": e.content, "content_hash": e.content_hash, "created_at": e.created_at, "pinned": e.pinned})
         return len(rows)
