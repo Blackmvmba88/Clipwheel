@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
@@ -15,7 +16,12 @@ class ClipboardWatcher:
     def run_forever(self) -> None:
         last = None
         while True:
-            current = read_clipboard_text()
+            try:
+                current = read_clipboard_text()
+            except RuntimeError as exc:
+                print(f"clipboard read failed: {exc}", file=sys.stderr)
+                time.sleep(self.interval_seconds)
+                continue
             if current and current != last:
                 self.store.add(current)
                 last = current

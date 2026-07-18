@@ -8,6 +8,17 @@ from cleepwheel.storage import ClipboardStore
 
 
 class ClipboardStoreTest(unittest.TestCase):
+    def test_empty_and_missing_entry_operations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ClipboardStore(Path(tmp) / "db.sqlite3")
+            self.assertFalse(store.add("  \n"))
+            self.assertIsNone(store.latest())
+            self.assertIsNone(store.get(999))
+            self.assertFalse(store.update(999, "new"))
+            self.assertFalse(store.update(999, "  "))
+            self.assertFalse(store.delete(999))
+            self.assertEqual(store.doctor(), ["clipboard history is empty"])
+
     def test_add_list_search_clear(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = ClipboardStore(Path(tmp) / "db.sqlite3")
@@ -51,3 +62,10 @@ class ClipboardStoreTest(unittest.TestCase):
             with csv_path.open(encoding="utf-8", newline="") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual([row["content"] for row in rows], ["two", "one"])
+
+    def test_limits_content_and_reports_stats(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ClipboardStore(Path(tmp) / "db.sqlite3")
+            self.assertTrue(store.add("x" * 60000))
+            self.assertEqual(len(store.latest().content), 50000)
+            self.assertEqual(store.stats(), {"entries": 1, "distinct_hashes": 1})

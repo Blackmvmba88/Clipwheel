@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleepwheel"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local text clipboard history for macOS"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -14,7 +14,7 @@ dependencies = []
 
 [project.scripts]
 cleepwheel = "cleepwheel.cli:main"
+clipwill = "cleepwheel.cli:clipwill_main"
 
 [tool.setuptools.packages.find]
 include = ["cleepwheel*"]
-
