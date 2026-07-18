@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Blackmvmba88/Clipwheel/actions"><img alt="CI" src="https://github.com/Blackmvmba88/Clipwheel/actions/workflows/python.yml/badge.svg"></a>
+  <a href="https://github.com/Blackmvmba88/Clipwheel/actions"><img alt="CI" src="https://github.com/Blackmvmba88/Clipwheel/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue">
   <img alt="macOS" src="https://img.shields.io/badge/platform-macOS-black">
   <img alt="SQLite" src="https://img.shields.io/badge/storage-SQLite-07405e">
