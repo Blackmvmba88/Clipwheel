@@ -105,8 +105,10 @@ class IntegratedInfrastructureTest(unittest.TestCase):
                 self.assertIn("second entry", entries)
 
                 copy_req = request.Request(f"{base}/api/entries/2/copy", method="POST")
-                copy_resp = request.urlopen(copy_req).read().decode("utf-8")
+                with patch("cleepwheel.webui.write_clipboard_text") as write_clipboard:
+                    copy_resp = request.urlopen(copy_req).read().decode("utf-8")
                 self.assertIn('"ok": true', copy_resp)
+                write_clipboard.assert_called_once_with("second entry")
 
                 update_req = request.Request(
                     f"{base}/api/entries/2",
