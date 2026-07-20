@@ -48,6 +48,23 @@ class CliTest(unittest.TestCase):
             self.assertIn("removed 2 entries", text)
             self.assertTrue(output.exists())
 
+    def test_classify_command_handles_text_entries_and_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "history.sqlite3"
+            store = cli.ClipboardStore(db)
+            store.add("Coro\nUna voz\nUna voz\nVerso\nSigue el sol")
+            entry = store.latest()
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["--db", str(db), "classify", "Black Mamba - Beat.wav"]), 0)
+                self.assertEqual(cli.main(["--db", str(db), "classify", "--entry", str(entry.id)]), 0)
+                self.assertEqual(cli.main(["--db", str(db), "classify", "--category", "song"]), 0)
+
+            text = stdout.getvalue()
+            self.assertIn("category: song", text)
+            self.assertIn("song |", text)
+
     def test_doctor_treats_empty_history_as_healthy_warning(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "history.sqlite3"
