@@ -25,6 +25,7 @@ CleepWheel captura texto copiado en macOS y lo concentra en una sola base SQLite
 - CLI para listar, buscar, exportar y diagnosticar.
 - Ventana gráfica para copiar, editar y borrar entradas.
 - WebUI local con filtrado instantáneo.
+- Capa local de inteligencia para clasificar copias como canciones/letras, metacomandos, links, código, contactos, credenciales, comandos, notas o datos estructurados.
 - Listener global del botón central con ventana precargada.
 - Integración con `launchd` para procesos persistentes.
 - Límite visible configurable sin eliminar datos almacenados.
@@ -66,6 +67,8 @@ Para consultar el historial:
 ```bash
 cleepwheel list
 cleepwheel search "texto"
+cleepwheel classify --category song
+cleepwheel classify "Clasifica esta letra por mood"
 cleepwheel export --format json --output history.json
 ```
 
@@ -85,6 +88,7 @@ python3 -m cleepwheel webui
 | `cleepwheel doctor` | Comprueba SQLite, clipboard, watcher y listener global. |
 | `cleepwheel list` | Lista las entradas recientes. |
 | `cleepwheel search "texto"` | Busca contenido guardado. |
+| `cleepwheel classify` | Muestra categorías, clasifica texto o lista entradas por categoría. |
 | `cleepwheel export` | Exporta el historial. |
 | `cleepwheel watch` | Captura texto copiado. |
 | `cleepwheel mouse` | Abre la ventana gráfica. |
@@ -153,6 +157,70 @@ cleepwheel webui --no-browser
 ```
 
 La WebUI permite filtrar, inspeccionar, copiar, editar y borrar entradas usando los mismos datos que la CLI y la ventana local.
+
+## Inteligencia local
+
+CleepWheel clasifica cada entrada al guardarla o editarla. La clasificación es local, determinística y no llama a servicios externos.
+
+Categorías iniciales:
+
+| Categoría | Uso |
+|---|---|
+| `song` | Letras de canciones, links musicales, archivos de audio y metadatos como BPM, coro, verso o hook. |
+| `metacommand` | Instrucciones/prompts como clasificar, resumir, analizar, traducir, generar o corregir. |
+| `credential` | Tokens, passwords, API keys y secretos. |
+| `link` | URLs generales. |
+| `code` | Fragmentos de código. |
+| `command` | Comandos de terminal. |
+| `contact` | Emails o teléfonos. |
+| `structured-data` | JSON válido. |
+| `task-note` | TODOs, notas y listas de tareas. |
+
+Ejemplos:
+
+```bash
+cleepwheel classify
+cleepwheel classify --entry 12
+cleepwheel classify --category song
+cleepwheel classify --category metacommand
+```
+
+## SoundCloud API helper
+
+El paquete incluye un helper Python pequeño para consumir la API pública de SoundCloud sin guardar credenciales en el código. Usa OAuth 2.1 con el encabezado documentado por SoundCloud:
+
+```text
+Authorization: OAuth <access_token>
+```
+
+Ejemplo:
+
+```python
+import os
+
+from cleepwheel.soundcloud import SoundCloudClient
+
+client = SoundCloudClient(os.environ["SOUNDCLOUD_ACCESS_TOKEN"])
+page = client.search_tracks("iyary gomez", limit=20)
+
+for track in page.collection:
+    print(track.get("title"))
+
+if page.next_href:
+    next_page = client.get_page(page.next_href)
+```
+
+Funciones incluidas:
+
+| Funcion | Uso |
+|---|---|
+| `search_tracks(query, limit=20)` | Busca tracks con `linked_partitioning=true`. |
+| `get_related_artists(user_urn, limit=10)` | Obtiene artistas relacionados para un URN de usuario. |
+| `get_related_tracks(track_urn, limit=10)` | Obtiene tracks relacionados con `access=playable`. |
+| `resolve_url(soundcloud_url)` | Resuelve una URL publica de SoundCloud. |
+| `get_all_pages(path_or_url, max_pages=10)` | Sigue `next_href` hasta agotar paginas o llegar al limite. |
+
+El helper no implementa login ni almacena tokens. Carga `client_id`, `client_secret`, access tokens y refresh tokens desde variables de entorno o un gestor de secretos. En errores HTTP lanza `SoundCloudAPIError`; en `429` reintenta con backoff exponencial limitado.
 
 ## Diagnóstico
 

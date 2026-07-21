@@ -50,6 +50,7 @@ def _html_page() -> str:
     .entry:hover, .entry.selected { background: rgba(90,215,255,0.09); }
     .meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
     .content { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
+    .badge { display: inline-flex; align-items: center; border: 1px solid var(--line); color: var(--accent); border-radius: 999px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
     #detail { padding: 16px; }
     .detail-top { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
     .detail-meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
@@ -132,7 +133,7 @@ def _html_page() -> str:
         li.className = 'entry' + (selectedId === entry.id ? ' selected' : '');
         li.innerHTML = `
           <div class="meta">
-            <span>#${entry.id}</span>
+            <span>#${entry.id}<span class="badge">${escapeHtml(entry.classification?.category || 'general')}</span></span>
             <span>${escapeHtml(entry.created_at)}</span>
           </div>
           <div class="content">${escapeHtml(entry.content.slice(0, 220))}${entry.content.length > 220 ? '...' : ''}</div>
@@ -146,7 +147,7 @@ def _html_page() -> str:
       selectedId = entry.id;
       selectedEntry = entry;
       els.editor.value = entry.content;
-      els.detailMeta.textContent = `ID ${entry.id} · ${entry.created_at} · ${entry.content_hash.slice(0, 16)}…`;
+      els.detailMeta.textContent = `ID ${entry.id} · ${entry.created_at} · ${entry.content_hash.slice(0, 16)}… · ${entry.classification?.category || 'general'}`;
       setStatus(`Selected #${entry.id}`);
       load();
     }
@@ -162,7 +163,7 @@ def _html_page() -> str:
         if (updated) {
           selectedEntry = updated;
           els.editor.value = updated.content;
-          els.detailMeta.textContent = `ID ${updated.id} · ${updated.created_at} · ${updated.content_hash.slice(0, 16)}…`;
+          els.detailMeta.textContent = `ID ${updated.id} · ${updated.created_at} · ${updated.content_hash.slice(0, 16)}… · ${updated.classification?.category || 'general'}`;
         }
       }
     }
@@ -239,6 +240,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         return json.loads(raw.decode("utf-8"))
 
+    def _entry_payload(self, entry) -> dict:
+        classification = self.store.classification(entry.id)
+        payload = asdict(entry)
+        payload["classification"] = asdict(classification) if classification else None
+        return payload
+
     def log_message(self, format: str, *args) -> None:  # noqa: A003
         return
 
@@ -261,7 +268,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             )
             self._send_json(
                 {
-                    "entries": [asdict(entry) for entry in entries],
+                    "entries": [self._entry_payload(entry) for entry in entries],
                     "stats": self.store.stats(),
                 }
             )
@@ -289,7 +296,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "update failed"}, 400)
                 return
             updated = self.store.get(entry_id)
-            self._send_json({"ok": True, "entry": asdict(updated) if updated else None})
+            self._send_json({"ok": True, "entry": self._entry_payload(updated) if updated else None})
             return
         self._send_json({"error": "not found"}, 404)
 

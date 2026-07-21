@@ -44,6 +44,23 @@ def format_entry(entry) -> str:
     return f"[{entry.id}] {entry.created_at} | {snippet}"
 
 
+def format_classification(classification) -> str:
+    tags = ", ".join(classification.tags) if classification.tags else "none"
+    reasons = "; ".join(classification.reasons) if classification.reasons else "none"
+    entry = f"entry_id: {classification.entry_id}" if classification.entry_id else "entry_id: none"
+    return "\n".join(
+        [
+            entry,
+            f"category: {classification.category}",
+            f"tags: {tags}",
+            f"sensitivity: {classification.sensitivity}",
+            f"confidence: {classification.confidence:.2f}",
+            f"summary: {classification.summary}",
+            f"reasons: {reasons}",
+        ]
+    )
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     watcher = ClipboardWatcher(ClipboardStore(args.db), interval_seconds=args.interval)
     try:
@@ -92,6 +109,33 @@ def cmd_search(args: argparse.Namespace) -> int:
     store = ClipboardStore(args.db)
     for entry in store.search(args.query, args.limit):
         print(format_entry(entry))
+    return 0
+
+
+def cmd_classify(args: argparse.Namespace) -> int:
+    store = ClipboardStore(args.db)
+    if args.category:
+        for entry in store.list_by_category(args.category, args.limit):
+            classification = store.classification(entry.id)
+            prefix = f"{classification.category} | " if classification else ""
+            print(prefix + format_entry(entry))
+        return 0
+    if args.entry is not None:
+        classification = store.classification(args.entry)
+        if not classification:
+            print(f"entry not found or not classified: {args.entry}", file=sys.stderr)
+            return 1
+        print(format_classification(classification))
+        return 0
+    if args.text:
+        print(format_classification(store.classify_content(args.text)))
+        return 0
+    counts = store.category_counts()
+    if not counts:
+        print("no classified entries")
+        return 0
+    for category, count in counts.items():
+        print(f"{category}: {count}")
     return 0
 
 
@@ -283,6 +327,13 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("query")
     search.add_argument("--limit", type=positive_int, default=SETTINGS.history_view_limit)
     search.set_defaults(func=cmd_search)
+
+    classify = subparsers.add_parser("classify", help="classify clipboard text or inspect categories")
+    classify.add_argument("text", nargs="?", help="text to classify without storing it")
+    classify.add_argument("--entry", type=int, help="show classification for an entry id")
+    classify.add_argument("--category", help="list stored entries by category, for example: song")
+    classify.add_argument("--limit", type=positive_int, default=SETTINGS.history_view_limit)
+    classify.set_defaults(func=cmd_classify)
 
     clear = subparsers.add_parser("clear", help="delete all entries")
     clear.set_defaults(func=cmd_clear)

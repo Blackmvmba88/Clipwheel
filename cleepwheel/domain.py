@@ -12,6 +12,17 @@ class ClipboardEntry:
 
 
 @dataclass(frozen=True)
+class ClipboardClassification:
+    entry_id: int | None
+    category: str
+    tags: tuple[str, ...]
+    summary: str
+    confidence: float
+    sensitivity: str
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ActionResult:
     ok: bool
     evidence: str

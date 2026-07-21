@@ -69,3 +69,18 @@ class ClipboardStoreTest(unittest.TestCase):
             self.assertTrue(store.add("x" * 60000))
             self.assertEqual(len(store.latest().content), 50000)
             self.assertEqual(store.stats(), {"entries": 1, "distinct_hashes": 1})
+
+    def test_persists_classification_and_lists_by_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ClipboardStore(Path(tmp) / "db.sqlite3")
+            self.assertTrue(store.add("Coro\nLuz de luna\nLuz de luna\nVerso\nSigo aqui"))
+            entry = store.latest()
+
+            classification = store.classification(entry.id)
+            self.assertEqual(classification.category, "song")
+            self.assertIn("lyrics", classification.tags)
+            self.assertEqual(store.category_counts(), {"song": 1})
+            self.assertEqual(store.list_by_category("song")[0].id, entry.id)
+
+            self.assertTrue(store.update(entry.id, "https://example.com"))
+            self.assertEqual(store.classification(entry.id).category, "link")

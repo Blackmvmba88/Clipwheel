@@ -103,6 +103,7 @@ class IntegratedInfrastructureTest(unittest.TestCase):
 
                 entries = request.urlopen(f"{base}/api/entries?query=second").read().decode("utf-8")
                 self.assertIn("second entry", entries)
+                self.assertIn('"classification"', entries)
 
                 copy_req = request.Request(f"{base}/api/entries/2/copy", method="POST")
                 with patch("cleepwheel.webui.write_clipboard_text") as write_clipboard:
