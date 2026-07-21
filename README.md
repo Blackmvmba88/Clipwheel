@@ -200,7 +200,7 @@ import os
 
 from cleepwheel.soundcloud import SoundCloudClient
 
-client = SoundCloudClient(os.environ["SOUNDCLOUD_ACCESS_TOKEN"])
+client = SoundCloudClient.from_env()
 page = client.search_tracks("iyary gomez", limit=20)
 
 for track in page.collection:
@@ -220,9 +220,11 @@ Funciones incluidas:
 | `get_related_tracks(track_urn, limit=10)` | Obtiene tracks relacionados con `access=playable`. |
 | `resolve_url(soundcloud_url)` | Resuelve una URL publica de SoundCloud. |
 | `update_track_metadata(track_urn, ...)` | Actualiza metadata oficial de un track mediante `PUT /tracks/{track_urn}`. |
-| `get_all_pages(path_or_url, max_pages=10)` | Sigue `next_href` hasta agotar paginas o llegar al limite. |
+| `get_all_pages(path_or_url, max_pages=10, max_items=None)` | Sigue `next_href` hasta agotar paginas o llegar al limite. |
 
-El helper no implementa login ni almacena tokens. Carga `client_id`, `client_secret`, access tokens y refresh tokens desde variables de entorno o un gestor de secretos. En errores HTTP lanza `SoundCloudAPIError`; en `429` reintenta con backoff exponencial limitado.
+El helper no implementa login ni almacena tokens. Carga `client_id`, `client_secret`, access tokens y refresh tokens desde variables de entorno o un gestor de secretos. `SoundCloudClient.from_env()` lee `SOUNDCLOUD_ACCESS_TOKEN` por defecto. En errores HTTP lanza `SoundCloudAPIError`; en `429` reintenta con backoff exponencial limitado y respeta `Retry-After` cuando SoundCloud lo devuelve.
+
+El cliente valida entradas antes de tocar la red: limites mayores a cero, URNs con prefijo `soundcloud:`, URLs absolutas para `resolve_url`, fecha `yyyy-mm-dd`, valores de `license` y `sharing` documentados, y booleanos reales para banderas de track.
 
 La API publica documentada permite automatizar metadata como `label_name`, `isrc`, `license`, `genre`, `tag_list`, `description`, `sharing`, `streamable` y campos similares de tracks. Los campos del portal de monetizacion como contributors, songwriters, confirmacion de derechos y submit de monetizacion no aparecen en la OpenAPI publica; para esos pasos usa el portal oficial o una automatizacion de navegador autenticado.
 
