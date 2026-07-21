@@ -52,6 +52,15 @@ class SoundCloudClient:
             },
         )
 
+    def my_tracks(self, limit: int = 50, sort: str | None = None) -> SoundCloudPage:
+        params = {
+            "limit": str(limit),
+            "linked_partitioning": "true",
+        }
+        if sort:
+            params["sort"] = sort
+        return self.get_page("/me/tracks", params)
+
     def get_related_artists(self, user_urn: str, limit: int = 10) -> SoundCloudPage:
         return self.get_page(
             f"/users/{parse.quote(user_urn, safe='')}/related",
@@ -76,6 +85,55 @@ class SoundCloudClient:
         if not isinstance(payload, dict):
             raise SoundCloudAPIError(502, "resolve endpoint returned a non-object payload")
         return payload
+
+    def update_track_metadata(
+        self,
+        track_urn: str,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        genre: str | None = None,
+        tag_list: str | None = None,
+        label_name: str | None = None,
+        release: str | None = None,
+        release_date: str | None = None,
+        isrc: str | None = None,
+        license: str | None = None,
+        sharing: str | None = None,
+        streamable: bool | None = None,
+        downloadable: bool | None = None,
+        commentable: bool | None = None,
+        reveal_stats: bool | None = None,
+        reveal_comments: bool | None = None,
+    ) -> dict[str, Any]:
+        fields = {
+            "track[title]": title,
+            "track[description]": description,
+            "track[genre]": genre,
+            "track[tag_list]": tag_list,
+            "track[label_name]": label_name,
+            "track[release]": release,
+            "track[release_date]": release_date,
+            "track[isrc]": isrc,
+            "track[license]": license,
+            "track[sharing]": sharing,
+            "track[streamable]": streamable,
+            "track[downloadable]": downloadable,
+            "track[commentable]": commentable,
+            "track[reveal_stats]": reveal_stats,
+            "track[reveal_comments]": reveal_comments,
+        }
+        payload = {key: value for key, value in fields.items() if value is not None}
+        if not payload:
+            raise ValueError("at least one track metadata field is required")
+        result = self.request_json(
+            "PUT",
+            f"/tracks/{parse.quote(track_urn, safe='')}",
+            json_body=payload,
+        )
+        if not isinstance(result, dict):
+            raise SoundCloudAPIError(502, "track update returned a non-object payload")
+        return result
 
     def get_page(self, path_or_url: str, params: dict[str, str] | None = None) -> SoundCloudPage:
         payload = self.get_json(path_or_url, params)
@@ -111,11 +169,22 @@ class SoundCloudClient:
         return items
 
     def get_json(self, path_or_url: str, params: dict[str, str] | None = None) -> Any:
+        return self.request_json("GET", path_or_url, params)
+
+    def request_json(
+        self,
+        method: str,
+        path_or_url: str,
+        params: dict[str, str] | None = None,
+        *,
+        json_body: dict[str, Any] | None = None,
+    ) -> Any:
         url = self._build_url(path_or_url, params)
+        data = json.dumps(json_body).encode("utf-8") if json_body is not None else None
         last_error: SoundCloudAPIError | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                with request.urlopen(self._request(url), timeout=self.timeout_seconds) as response:
+                with request.urlopen(self._request(url, method, data), timeout=self.timeout_seconds) as response:
                     raw = response.read().decode("utf-8")
                     return json.loads(raw) if raw else {}
             except error.HTTPError as exc:
@@ -132,13 +201,18 @@ class SoundCloudClient:
             raise last_error
         raise SoundCloudAPIError(0, "request failed")
 
-    def _request(self, url: str) -> request.Request:
+    def _request(self, url: str, method: str = "GET", data: bytes | None = None) -> request.Request:
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"OAuth {self.access_token}",
+        }
+        if data is not None:
+            headers["Content-Type"] = "application/json"
         return request.Request(
             url,
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"OAuth {self.access_token}",
-            },
+            data=data,
+            headers=headers,
+            method=method,
         )
 
     def _build_url(self, path_or_url: str, params: dict[str, str] | None = None) -> str:

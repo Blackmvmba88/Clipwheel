@@ -215,12 +215,16 @@ Funciones incluidas:
 | Funcion | Uso |
 |---|---|
 | `search_tracks(query, limit=20)` | Busca tracks con `linked_partitioning=true`. |
+| `my_tracks(limit=50, sort=None)` | Lista tracks del usuario autenticado desde `/me/tracks`. |
 | `get_related_artists(user_urn, limit=10)` | Obtiene artistas relacionados para un URN de usuario. |
 | `get_related_tracks(track_urn, limit=10)` | Obtiene tracks relacionados con `access=playable`. |
 | `resolve_url(soundcloud_url)` | Resuelve una URL publica de SoundCloud. |
+| `update_track_metadata(track_urn, ...)` | Actualiza metadata oficial de un track mediante `PUT /tracks/{track_urn}`. |
 | `get_all_pages(path_or_url, max_pages=10)` | Sigue `next_href` hasta agotar paginas o llegar al limite. |
 
 El helper no implementa login ni almacena tokens. Carga `client_id`, `client_secret`, access tokens y refresh tokens desde variables de entorno o un gestor de secretos. En errores HTTP lanza `SoundCloudAPIError`; en `429` reintenta con backoff exponencial limitado.
+
+La API publica documentada permite automatizar metadata como `label_name`, `isrc`, `license`, `genre`, `tag_list`, `description`, `sharing`, `streamable` y campos similares de tracks. Los campos del portal de monetizacion como contributors, songwriters, confirmacion de derechos y submit de monetizacion no aparecen en la OpenAPI publica; para esos pasos usa el portal oficial o una automatizacion de navegador autenticado.
 
 ## Diagnóstico
 

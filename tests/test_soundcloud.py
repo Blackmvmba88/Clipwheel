@@ -63,6 +63,57 @@ class SoundCloudClientTest(unittest.TestCase):
         self.assertIn("/tracks/soundcloud%3Atracks%3A308946187/related", urls[1])
         self.assertIn("access=playable", urls[1])
 
+    def test_my_tracks_uses_authenticated_me_endpoint(self):
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["url"] = req.full_url
+            return FakeResponse({"collection": [{"id": 10, "title": "mine"}]})
+
+        with patch("cleepwheel.soundcloud.request.urlopen", side_effect=fake_urlopen):
+            page = SoundCloudClient("token").my_tracks(limit=25, sort="created_at")
+
+        self.assertEqual(page.collection[0]["title"], "mine")
+        self.assertIn("/me/tracks", captured["url"])
+        self.assertIn("limit=25", captured["url"])
+        self.assertIn("sort=created_at", captured["url"])
+
+    def test_update_track_metadata_puts_only_supported_fields(self):
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["method"] = req.get_method()
+            captured["url"] = req.full_url
+            captured["headers"] = dict(req.header_items())
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            return FakeResponse({"id": 7, "label_name": "BlackMamba RECORDS"})
+
+        with patch("cleepwheel.soundcloud.request.urlopen", side_effect=fake_urlopen):
+            updated = SoundCloudClient("token").update_track_metadata(
+                "soundcloud:tracks:123",
+                label_name="BlackMamba RECORDS",
+                license="all-rights-reserved",
+                streamable=True,
+            )
+
+        self.assertEqual(updated["label_name"], "BlackMamba RECORDS")
+        self.assertEqual(captured["method"], "PUT")
+        self.assertIn("/tracks/soundcloud%3Atracks%3A123", captured["url"])
+        self.assertEqual(captured["headers"]["Authorization"], "OAuth token")
+        self.assertEqual(captured["headers"]["Content-type"], "application/json")
+        self.assertEqual(
+            captured["body"],
+            {
+                "track[label_name]": "BlackMamba RECORDS",
+                "track[license]": "all-rights-reserved",
+                "track[streamable]": True,
+            },
+        )
+
+    def test_update_track_metadata_requires_a_field(self):
+        with self.assertRaises(ValueError):
+            SoundCloudClient("token").update_track_metadata("soundcloud:tracks:123")
+
     def test_get_all_pages_follows_next_href_until_absent(self):
         responses = [
             FakeResponse(
