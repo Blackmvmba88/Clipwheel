@@ -185,6 +185,43 @@ cleepwheel classify --category song
 cleepwheel classify --category metacommand
 ```
 
+## SoundCloud API helper
+
+El paquete incluye un helper Python pequeño para consumir la API pública de SoundCloud sin guardar credenciales en el código. Usa OAuth 2.1 con el encabezado documentado por SoundCloud:
+
+```text
+Authorization: OAuth <access_token>
+```
+
+Ejemplo:
+
+```python
+import os
+
+from cleepwheel.soundcloud import SoundCloudClient
+
+client = SoundCloudClient(os.environ["SOUNDCLOUD_ACCESS_TOKEN"])
+page = client.search_tracks("iyary gomez", limit=20)
+
+for track in page.collection:
+    print(track.get("title"))
+
+if page.next_href:
+    next_page = client.get_page(page.next_href)
+```
+
+Funciones incluidas:
+
+| Funcion | Uso |
+|---|---|
+| `search_tracks(query, limit=20)` | Busca tracks con `linked_partitioning=true`. |
+| `get_related_artists(user_urn, limit=10)` | Obtiene artistas relacionados para un URN de usuario. |
+| `get_related_tracks(track_urn, limit=10)` | Obtiene tracks relacionados con `access=playable`. |
+| `resolve_url(soundcloud_url)` | Resuelve una URL publica de SoundCloud. |
+| `get_all_pages(path_or_url, max_pages=10)` | Sigue `next_href` hasta agotar paginas o llegar al limite. |
+
+El helper no implementa login ni almacena tokens. Carga `client_id`, `client_secret`, access tokens y refresh tokens desde variables de entorno o un gestor de secretos. En errores HTTP lanza `SoundCloudAPIError`; en `429` reintenta con backoff exponencial limitado.
+
 ## Diagnóstico
 
 ```bash
