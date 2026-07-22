@@ -122,6 +122,40 @@ class CliTest(unittest.TestCase):
             )
             serve_webui.assert_called_once_with(db, host="0.0.0.0", port=9010, open_browser=False)
 
+    @patch("cleepwheel.cli.serve_soundcloud_autofill", return_value=0)
+    def test_soundcloud_autofill_delegates_to_server(self, serve_autofill):
+        self.assertEqual(
+            cli.main(
+                [
+                    "soundcloud-autofill",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "9999",
+                    "--main-artist",
+                    "Artist",
+                    "--songwriter",
+                    "Writer",
+                    "--label",
+                    "Label",
+                    "--explicit",
+                    "--has-isrc",
+                    "--no-browser",
+                ]
+            ),
+            0,
+        )
+
+        kwargs = serve_autofill.call_args.kwargs
+        self.assertEqual(kwargs["host"], "0.0.0.0")
+        self.assertEqual(kwargs["port"], 9999)
+        self.assertFalse(kwargs["open_browser"])
+        self.assertEqual(kwargs["profile"].main_artist, "Artist")
+        self.assertEqual(kwargs["profile"].songwriter, "Writer")
+        self.assertEqual(kwargs["profile"].label, "Label")
+        self.assertTrue(kwargs["profile"].explicit)
+        self.assertTrue(kwargs["profile"].has_isrc)
+
     @patch("cleepwheel.cli.login_with_pkce")
     def test_soundcloud_auth_login_uses_env_credentials(self, login):
         login.return_value = Path("/tmp/token.json")

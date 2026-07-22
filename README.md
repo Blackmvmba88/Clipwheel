@@ -219,6 +219,25 @@ cleepwheel soundcloud-auth status
 cleepwheel soundcloud-auth refresh
 ```
 
+Para el portal de monetizacion, donde la API publica no expone contributors/songwriters/confirmacion de derechos, CleepWheel incluye una interfaz local que genera un script de autofill con tus datos:
+
+```bash
+cleepwheel soundcloud-autofill
+```
+
+Abre un formulario local con valores por defecto:
+
+```text
+Artista principal: Iyary Gomez
+Songwriter: Iyary Cancino Gomez
+Label: BlackMamba RECORDS
+Not explicit
+I wrote this song
+Confirmo derechos para monetizar
+```
+
+Desde esa interfaz puedes ajustar los datos, copiar el script y pegarlo en la consola de Chrome dentro de SoundCloud for Artists. No guarda tokens, client secrets ni credenciales.
+
 Por defecto el token queda en:
 
 ```text

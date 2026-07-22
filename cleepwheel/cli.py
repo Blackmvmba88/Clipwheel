@@ -17,6 +17,7 @@ from .launchd import (
 from .mouse import MouseListenerError, listen_for_middle_click, run_mouse_window
 from .ui import open_warm_window
 from .settings import load_settings
+from .soundcloud_autofill import SoundCloudAutofillProfile, serve_soundcloud_autofill
 from .soundcloud_auth import (
     DEFAULT_REDIRECT_URI,
     default_token_path,
@@ -97,6 +98,24 @@ def cmd_warm_window(args: argparse.Namespace) -> int:
 
 def cmd_webui(args: argparse.Namespace) -> int:
     return serve_webui(args.db, host=args.host, port=args.port, open_browser=not args.no_browser)
+
+
+def cmd_soundcloud_autofill(args: argparse.Namespace) -> int:
+    profile = SoundCloudAutofillProfile(
+        main_artist=args.main_artist,
+        songwriter=args.songwriter,
+        label=args.label,
+        explicit=args.explicit,
+        wrote_song=not args.not_writer,
+        has_isrc=args.has_isrc,
+        confirm_rights=not args.no_rights_confirm,
+    )
+    return serve_soundcloud_autofill(
+        host=args.host,
+        port=args.port,
+        open_browser=not args.no_browser,
+        profile=profile,
+    )
 
 
 def cmd_tui(args: argparse.Namespace) -> int:
@@ -387,6 +406,21 @@ def build_parser() -> argparse.ArgumentParser:
     webui.add_argument("--port", type=positive_int, default=8765)
     webui.add_argument("--no-browser", action="store_true")
     webui.set_defaults(func=cmd_webui)
+
+    autofill = subparsers.add_parser(
+        "soundcloud-autofill", help="open SoundCloud monetization autofill helper"
+    )
+    autofill.add_argument("--host", default="127.0.0.1")
+    autofill.add_argument("--port", type=positive_int, default=8776)
+    autofill.add_argument("--main-artist", default="Iyary Gomez")
+    autofill.add_argument("--songwriter", default="Iyary Cancino Gomez")
+    autofill.add_argument("--label", default="BlackMamba RECORDS")
+    autofill.add_argument("--explicit", action="store_true")
+    autofill.add_argument("--not-writer", action="store_true")
+    autofill.add_argument("--has-isrc", action="store_true")
+    autofill.add_argument("--no-rights-confirm", action="store_true")
+    autofill.add_argument("--no-browser", action="store_true")
+    autofill.set_defaults(func=cmd_soundcloud_autofill)
 
     tui = subparsers.add_parser("tui", help="open full terminal UI")
     tui.set_defaults(func=cmd_tui)
