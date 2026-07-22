@@ -71,6 +71,13 @@ class SoundCloudClient:
             raise ValueError(f"{env_var} is required")
         return cls(token, **kwargs)
 
+    @classmethod
+    def from_token_file(cls, path=None, **kwargs) -> "SoundCloudClient":
+        from .soundcloud_auth import load_tokens
+
+        tokens = load_tokens(path)
+        return cls(tokens.access_token, **kwargs)
+
     def search_tracks(self, query: str, limit: int = 20) -> SoundCloudPage:
         if not query.strip():
             raise ValueError("query is required")

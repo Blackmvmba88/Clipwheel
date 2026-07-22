@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from cleepwheel import cli
 from cleepwheel.domain import ClipboardEntry
+from cleepwheel.soundcloud_auth import SoundCloudTokens, save_tokens
 
 
 class CliTest(unittest.TestCase):
@@ -120,6 +121,76 @@ class CliTest(unittest.TestCase):
                 0,
             )
             serve_webui.assert_called_once_with(db, host="0.0.0.0", port=9010, open_browser=False)
+
+    @patch("cleepwheel.cli.login_with_pkce")
+    def test_soundcloud_auth_login_uses_env_credentials(self, login):
+        login.return_value = Path("/tmp/token.json")
+
+        with patch.dict(
+            "os.environ",
+            {"SOUNDCLOUD_CLIENT_ID": "client", "SOUNDCLOUD_CLIENT_SECRET": "secret"},
+        ), contextlib.redirect_stdout(io.StringIO()) as stdout:
+            result = cli.main(["soundcloud-auth", "login", "--no-browser", "--timeout", "1"])
+
+        self.assertEqual(result, 0)
+        self.assertIn("saved SoundCloud tokens", stdout.getvalue())
+        login.assert_called_once()
+        kwargs = login.call_args.kwargs
+        self.assertEqual(kwargs["client_id"], "client")
+        self.assertEqual(kwargs["client_secret"], "secret")
+        self.assertFalse(kwargs["open_browser"])
+
+    def test_soundcloud_auth_status_reads_token_file_without_printing_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "token.json"
+            save_tokens(
+                SoundCloudTokens(
+                    access_token="secret-access",
+                    refresh_token="secret-refresh",
+                    expires_in=3600,
+                    obtained_at=100,
+                ),
+                path,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = cli.main(["soundcloud-auth", "status", "--token-file", str(path)])
+
+        text = stdout.getvalue()
+        self.assertEqual(result, 0)
+        self.assertIn("access_token: present", text)
+        self.assertIn("refresh_token: present", text)
+        self.assertNotIn("secret-access", text)
+        self.assertNotIn("secret-refresh", text)
+
+    @patch("cleepwheel.cli.refresh_access_token")
+    def test_soundcloud_auth_refresh_updates_token_file(self, refresh):
+        refresh.return_value = SoundCloudTokens(
+            access_token="new-access",
+            refresh_token="new-refresh",
+            expires_in=3600,
+            obtained_at=200,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "token.json"
+            save_tokens(
+                SoundCloudTokens(
+                    access_token="old-access",
+                    refresh_token="old-refresh",
+                    expires_in=3600,
+                    obtained_at=100,
+                ),
+                path,
+            )
+            with patch.dict("os.environ", {"SOUNDCLOUD_CLIENT_ID": "client"}):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = cli.main(["soundcloud-auth", "refresh", "--token-file", str(path)])
+
+            refreshed = cli.load_tokens(path)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(refreshed.access_token, "new-access")
+        refresh.assert_called_once()
 
     @patch("cleepwheel.cli.run_mouse_window", return_value=0)
     @patch("sys.argv", ["clipwill"])

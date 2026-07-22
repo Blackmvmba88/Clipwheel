@@ -193,6 +193,38 @@ El paquete incluye un helper Python pequeño para consumir la API pública de So
 Authorization: OAuth <access_token>
 ```
 
+### Automatizar credenciales y login
+
+Para crear/recuperar `client_id` y `client_secret`, SoundCloud publica un script oficial en su repo `api`:
+
+```bash
+node path/to/soundcloud-api/scripts/sc-api-auth.mjs \
+  --name "CleepWheel" \
+  --description "Local SoundCloud API helper for track metadata automation" \
+  --website "https://github.com/Blackmvmba88/Clipwheel"
+```
+
+Ese script abre SoundCloud, registra o recupera una app y muestra `client_id` / `client_secret`. Guarda esos valores localmente, sin pegarlos en chats:
+
+```bash
+export SOUNDCLOUD_CLIENT_ID="..."
+export SOUNDCLOUD_CLIENT_SECRET="..."
+```
+
+Luego CleepWheel automatiza el OAuth PKCE local para generar y guardar `access_token` / `refresh_token` fuera del repo:
+
+```bash
+cleepwheel soundcloud-auth login
+cleepwheel soundcloud-auth status
+cleepwheel soundcloud-auth refresh
+```
+
+Por defecto el token queda en:
+
+```text
+~/.config/cleepwheel/soundcloud-token.json
+```
+
 Ejemplo:
 
 ```python
@@ -200,7 +232,7 @@ import os
 
 from cleepwheel.soundcloud import SoundCloudClient
 
-client = SoundCloudClient.from_env()
+client = SoundCloudClient.from_token_file()
 page = client.search_tracks("iyary gomez", limit=20)
 
 for track in page.collection:

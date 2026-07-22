@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -16,6 +17,14 @@ from .launchd import (
 from .mouse import MouseListenerError, listen_for_middle_click, run_mouse_window
 from .ui import open_warm_window
 from .settings import load_settings
+from .soundcloud_auth import (
+    DEFAULT_REDIRECT_URI,
+    default_token_path,
+    load_tokens,
+    login_with_pkce,
+    refresh_access_token,
+    save_tokens,
+)
 from .storage import ClipboardStore
 from .webui import serve_webui
 from .tui import run_quick_view, run_tui
@@ -203,6 +212,72 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _soundcloud_client_id(args: argparse.Namespace) -> str:
+    client_id = args.client_id or os.environ.get("SOUNDCLOUD_CLIENT_ID", "")
+    if not client_id:
+        raise ValueError("missing client id; set SOUNDCLOUD_CLIENT_ID or pass --client-id")
+    return client_id
+
+
+def _soundcloud_client_secret(args: argparse.Namespace) -> str | None:
+    return args.client_secret or os.environ.get("SOUNDCLOUD_CLIENT_SECRET")
+
+
+def cmd_soundcloud_auth_login(args: argparse.Namespace) -> int:
+    try:
+        path = login_with_pkce(
+            client_id=_soundcloud_client_id(args),
+            client_secret=_soundcloud_client_secret(args),
+            redirect_uri=args.redirect_uri,
+            token_path=args.token_file,
+            open_browser=not args.no_browser,
+            timeout_seconds=args.timeout,
+        )
+    except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
+        print(f"soundcloud auth failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"saved SoundCloud tokens -> {path}")
+    return 0
+
+
+def cmd_soundcloud_auth_status(args: argparse.Namespace) -> int:
+    path = args.token_file or default_token_path()
+    if not path.exists():
+        print(f"missing token file: {path}", file=sys.stderr)
+        return 1
+    try:
+        tokens = load_tokens(path)
+    except (OSError, KeyError, ValueError) as exc:
+        print(f"invalid token file: {exc}", file=sys.stderr)
+        return 1
+    print(f"token_file: {path}")
+    print("access_token: present")
+    print(f"refresh_token: {'present' if tokens.refresh_token else 'missing'}")
+    print(f"expires_at: {tokens.expires_at}")
+    print(f"expires_within_5m: {tokens.expires_within(300)}")
+    return 0
+
+
+def cmd_soundcloud_auth_refresh(args: argparse.Namespace) -> int:
+    path = args.token_file or default_token_path()
+    try:
+        tokens = load_tokens(path)
+        if not tokens.refresh_token:
+            print("token file has no refresh_token", file=sys.stderr)
+            return 1
+        refreshed = refresh_access_token(
+            client_id=_soundcloud_client_id(args),
+            client_secret=_soundcloud_client_secret(args),
+            refresh_token=tokens.refresh_token,
+        )
+        save_tokens(refreshed, path)
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        print(f"soundcloud refresh failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"refreshed SoundCloud tokens -> {path}")
+    return 0
+
+
 def cmd_launchd_install(args: argparse.Namespace) -> int:
     settings = load_settings(args.db)
     plist = build_launchd_plist(settings, sys.executable, Path.cwd())
@@ -346,6 +421,38 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--output", type=Path, required=True)
     export.add_argument("--limit", type=int, default=0)
     export.set_defaults(func=cmd_export)
+
+    soundcloud_auth = subparsers.add_parser(
+        "soundcloud-auth", help="manage local SoundCloud OAuth tokens"
+    )
+    soundcloud_auth_sub = soundcloud_auth.add_subparsers(
+        dest="soundcloud_auth_command", required=True
+    )
+
+    sc_login = soundcloud_auth_sub.add_parser(
+        "login", help="run local OAuth PKCE login and save tokens"
+    )
+    sc_login.add_argument("--client-id", help="defaults to SOUNDCLOUD_CLIENT_ID")
+    sc_login.add_argument("--client-secret", help="defaults to SOUNDCLOUD_CLIENT_SECRET")
+    sc_login.add_argument("--redirect-uri", default=DEFAULT_REDIRECT_URI)
+    sc_login.add_argument("--token-file", type=Path)
+    sc_login.add_argument("--timeout", type=positive_int, default=180)
+    sc_login.add_argument("--no-browser", action="store_true")
+    sc_login.set_defaults(func=cmd_soundcloud_auth_login)
+
+    sc_status = soundcloud_auth_sub.add_parser(
+        "status", help="show local token status without printing secrets"
+    )
+    sc_status.add_argument("--token-file", type=Path)
+    sc_status.set_defaults(func=cmd_soundcloud_auth_status)
+
+    sc_refresh = soundcloud_auth_sub.add_parser(
+        "refresh", help="refresh saved SoundCloud tokens"
+    )
+    sc_refresh.add_argument("--client-id", help="defaults to SOUNDCLOUD_CLIENT_ID")
+    sc_refresh.add_argument("--client-secret", help="defaults to SOUNDCLOUD_CLIENT_SECRET")
+    sc_refresh.add_argument("--token-file", type=Path)
+    sc_refresh.set_defaults(func=cmd_soundcloud_auth_refresh)
 
     launchd = subparsers.add_parser("launchd", help="manage the clipboard watcher")
     launchd_sub = launchd.add_subparsers(dest="launchd_command", required=True)
